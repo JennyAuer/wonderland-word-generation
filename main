@@ -1,0 +1,107 @@
+from nltk import *
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, LSTM
+from keras.utils import np_utils
+from keras.callbacks import ModelCheckpoint
+
+
+# Jennifer Auer
+# Text Generation Using Lewis Carroll's Alice in Wonderland
+# May 30, 2021
+
+# References
+# Kumar, T. (2018, June 27). Load data from txt with pandas. https://stackoverflow.com/questions/21546739/load-data-
+#      from-txt-with-pandas
+# Carroll, L. (1865). Alice in wonderland. GitHub Gist. https://gist.github.com/phillipj/4944029
+# TP, S. (2018, July 04). Keras.utils fails to import. https://stackoverflow.com/questions/51166055/keras-utils-fails
+#      -to-import/51167232
+# Thoma, M. (2017, January 11). How to read HDF5 files in Python. https://stackoverflow.com/questions/28170623/how-to
+#      -read-hdf5-files-in-python
+# Nelson, D. (2021). Text generation with Python and TensorFlow/Keras. https://stackabuse.com/text-generation-with
+#      -python-and-tensorflow-keras/
+# Emmel, G.R. (2018). Text generator - Alice in Wonderland. https://www.kaggle.com/gremmel/text-generator-alice-in
+#      -wonderland
+# Brownlee, J. (2016, August 04). Text generation with LSTM Recurrent Neural Networks in Python with Keras. https
+#      ://machinelearningmastery.com/text-generation-lstm-recurrent-neural-networks-python-keras/
+
+
+# Feed in text and clean it up for analysis
+filename = '/Users/jennyauer99/Desktop/alice_in_wonderland.txt'
+alice = open(filename, 'r', encoding='utf-8').read()
+alice = alice.lower()
+punctuation = '''!()-[]{};:'"\,<>./?@#$%^&*_~'''
+
+for element in alice:
+    if element in punctuation:
+        alice = alice.replace(element, '')
+
+print("Cleaned up text: \n\n\n\n\n\n\n", alice)
+len(alice)
+
+vocabulary = sorted(set(list(alice)))
+
+
+characters = sorted(list(set(alice)))
+character_to_integer = dict((c, i) for i, c in enumerate(characters))
+
+character_quantity = len(alice)
+vocabulary_quantity = len(characters)
+print("Character Quantity : ", character_quantity)
+print("Vocabulary Quantity: ", vocabulary_quantity)
+
+sequence_length = 100
+dataX = []
+dataY = []
+# Convert characters to integers for entire text set
+for i in range(0, character_quantity - sequence_length, 1):
+    sequence_in = alice[i:i + sequence_length]
+    sequence_out = alice[i + sequence_length]
+    dataX.append([character_to_integer[char] for char in sequence_in])
+    dataY.append(character_to_integer[sequence_out])
+number_of_patterns = len(dataX)
+print("\n\n\nNumber of patterns found: ", number_of_patterns)
+
+# Reshape, normalize, one hot encode
+X = numpy.reshape(dataX, (number_of_patterns, sequence_length, 1))
+X = X / float(vocabulary_quantity)
+y = np_utils.to_categorical(dataY)
+
+# Define the LSTM model
+LSTM_model = Sequential()
+LSTM_model.add(LSTM(256, input_shape=(X.shape[1], X.shape[2])))
+LSTM_model.add(Dropout(0.2))
+LSTM_model.add(Dense(y.shape[1], activation='softmax'))
+LSTM_model.compile(loss='categorical_crossentropy', optimizer='adam')
+
+# Define the checkpoint
+interim_file_path = "model_weights_saved.hdf5"
+checkpoint = ModelCheckpoint(interim_file_path, monitor='loss', verbose=1, save_best_only=True, mode='min')
+callbacks_list = [checkpoint]
+
+LSTM_model.fit(X, y, epochs=20, batch_size=128, callbacks=callbacks_list)
+
+interim_file_name = "model_weights_saved.hdf5"
+LSTM_model.load_weights(interim_file_name)
+LSTM_model.compile(loss='categorical_crossentropy', optimizer='adam')
+
+integer_to_character = dict((i, c) for i, c in enumerate(characters))
+
+# Pick a random seed from original text
+start = numpy.random.randint(0, len(dataX) - 1)
+pattern = dataX[start]
+print("Random Seed:")
+print("\"", ''.join([integer_to_character[value] for value in pattern]), "\"")
+
+print("\n\n\nGenerated Text: \n")
+
+# Generate characters
+for i in range(1000):
+    x = numpy.reshape(pattern, (1, len(pattern), 1))
+    x = x / float(vocabulary_quantity)
+    prediction = LSTM_model.predict(x, verbose=0)
+    index = numpy.argmax(prediction)
+    result = integer_to_character[index]
+    sequence_in = [integer_to_character[value] for value in pattern]
+    sys.stdout.write(result)
+    pattern.append(index)
+    pattern = pattern[1:len(pattern)]
